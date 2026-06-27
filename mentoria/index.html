@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IIKO Write-Off: Автоматизация списаний</title>
+    <!-- Подключаем современный шрифт Outfit и Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Главный контейнер приложения (Десктопная сетка) -->
+    <div class="app-layout">
+        
+        <!-- ЛЕВАЯ ЧАСТЬ: Описание проекта и быстрые настройки симулятора -->
+        <div class="sidebar-panel">
+            <div class="brand">
+                <span class="brand-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </span>
+                <div class="brand-info">
+                    <h1>iikoWriteOff</h1>
+                    <p>Кейс №1 • Хакатон 2026</p>
+                </div>
+            </div>
+
+            <div class="sidebar-card">
+                <h3>Панель симулятора</h3>
+                <p class="card-desc">Используйте эти переключатели для демонстрации различных сценариев работы системы.</p>
+                
+                <div class="control-group">
+                    <label>Текущая роль:</label>
+                    <div class="role-selector-pills">
+                        <button class="pill-btn active" id="btn-role-employee" onclick="switchRole('employee')">
+                            Сотрудник
+                        </button>
+                        <button class="pill-btn" id="btn-role-reviewer" onclick="switchRole('reviewer')">
+                            Проверяющий
+                        </button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="simulation-delay">Задержка сети (API):</label>
+                    <div class="slider-container">
+                        <input type="range" id="simulation-delay" min="100" max="2000" step="100" value="800">
+                        <span id="delay-value">0.8с</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label class="toggle-container">
+                        <input type="checkbox" id="toggle-iiko-error">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Имитировать сбой API IIKO</span>
+                    </label>
+                    <span class="input-tip">Позволяет проверить отказоустойчивость приложения и вывод ошибок сотруднику при сбое синхронизации с базой.</span>
+                </div>
+
+                <div class="control-group">
+                    <button class="btn btn-secondary btn-block" onclick="resetDatabase()">Очистить локальную БД</button>
+                </div>
+            </div>
+
+            <div class="developer-credits">
+                <p>Разработано в рамках хакатона</p>
+                <div class="tags">
+                    <span class="tag">HTML5</span>
+                    <span class="tag">Vanilla CSS</span>
+                    <span class="tag">JS ES6</span>
+                    <span class="tag">localStorage</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ЦЕНТРАЛЬНАЯ ЧАСТЬ: Мобильный фрейм (Симулятор смартфона) -->
+        <div class="phone-frame-container">
+            <div class="phone-frame">
+                <!-- Камера смартфона (декоративный элемент) -->
+                <div class="phone-notch"></div>
+                <!-- Динамик -->
+                <div class="phone-speaker"></div>
+
+                <!-- Содержимое экрана экрана смартфона -->
+                <div class="phone-screen" id="phone-screen">
+                    
+                    <!-- Шапка мобильного приложения -->
+                    <header class="mobile-header">
+                        <div class="header-user-info" id="header-user-info-section" style="display: none;">
+                            <span class="user-avatar" id="header-avatar">🧑‍🍳</span>
+                            <div>
+                                <h4 id="header-user-name">Загрузка...</h4>
+                                <span class="badge" id="header-user-role">Отправитель</span>
+                            </div>
+                        </div>
+                        <div class="header-user-info" id="header-logo-section">
+                            <span class="user-avatar">🍕</span>
+                            <div>
+                                <h4>iikoWriteOff</h4>
+                                <span class="badge">Вход в систему</span>
+                            </div>
+                        </div>
+                        <div class="header-status">
+                            <span class="status-dot online" id="status-dot"></span>
+                            <span id="status-text">IIKO Online</span>
+                        </div>
+                    </header>
+
+                    <!-- Основной контент экрана скроллируемый -->
+                    <main class="mobile-content" id="mobile-main">
+                        
+                        <!-- ЭКРАН 1: Авторизация / Выбор профиля -->
+                        <section id="screen-login" class="screen-view active">
+                            <div class="welcome-box">
+                                <h2>Добро пожаловать</h2>
+                                <p>Выберите сотрудника для входа в систему списаний</p>
+                            </div>
+                            
+                            <div class="login-options-grid" id="login-users-list">
+                                <!-- Рендерится динамически из app.js -->
+                            </div>
+                        </section>
+
+                        <!-- ЭКРАН 2: Форма списания (Сотрудник) -->
+                        <section id="screen-writeoff-form" class="screen-view">
+                            <div class="section-title">
+                                <h2>Новое списание</h2>
+                                <p>Заполните форму для списания продукции</p>
+                            </div>
+
+                            <form id="writeoff-form" onsubmit="handleWriteoffSubmit(event)">
+                                <!-- 1. Выбор торговой точки -->
+                                <div class="form-group">
+                                    <label for="select-outlet">Торговая точка <span class="required">*</span></label>
+                                    <div class="select-wrapper">
+                                        <select id="select-outlet" required>
+                                            <!-- Рендерится динамически -->
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 2. Выбор продукции -->
+                                <div class="form-group">
+                                    <label>Продукция к списанию <span class="required">*</span></label>
+                                    <button type="button" class="product-picker-trigger" id="product-picker-btn" onclick="openProductModal()">
+                                        <span class="btn-text" id="selected-product-text">Выберите продукт из каталога...</span>
+                                        <span class="arrow-icon">➔</span>
+                                    </button>
+                                    <input type="hidden" id="selected-product-id" required>
+                                </div>
+
+                                <!-- Кол-во и Стоимость (Информационно) -->
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="input-amount">Количество <span class="required">*</span></label>
+                                        <div class="amount-input-control">
+                                            <button type="button" onclick="adjustAmount(-1)">−</button>
+                                            <input type="number" id="input-amount" value="1" min="1" step="1" required oninput="calculateEstimatedCost()">
+                                            <button type="button" onclick="adjustAmount(1)">+</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Примерная стоимость</label>
+                                        <div class="estimated-cost" id="estimated-cost-display">0 ₽</div>
+                                    </div>
+                                </div>
+
+                                <!-- 3. Выбор типа списания -->
+                                <div class="form-group">
+                                    <label>Тип списания <span class="required">*</span></label>
+                                    <div class="writeoff-type-cards">
+                                        <label class="type-card-option">
+                                            <input type="radio" name="writeoff-type" value="no-deduction" checked onchange="toggleDeductionEmployee(false)">
+                                            <div class="type-card-content">
+                                                <span class="icon">🏢</span>
+                                                <span class="title">Без удержания</span>
+                                                <span class="desc">Списание на расходы точки</span>
+                                            </div>
+                                        </label>
+                                        <label class="type-card-option">
+                                            <input type="radio" name="writeoff-type" value="deduction" onchange="toggleDeductionEmployee(true)">
+                                            <div class="type-card-content">
+                                                <span class="icon">💼</span>
+                                                <span class="title">С удержанием</span>
+                                                <span class="desc">Списание за счет сотрудника</span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Выбор сотрудника для удержания (условный) -->
+                                <div class="form-group hidden" id="deduction-employee-group">
+                                    <label for="select-deduction-employee">Сотрудник для удержания <span class="required">*</span></label>
+                                    <div class="select-wrapper">
+                                        <select id="select-deduction-employee">
+                                            <!-- Заполняется динамически -->
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 4. Загрузка фото -->
+                                <div class="form-group">
+                                    <label>Фотография продукции <span class="required">*</span></label>
+                                    <div class="photo-upload-zone" id="photo-upload-zone">
+                                        <input type="file" id="input-photo-file" accept="image/*" class="hidden-input" onchange="handlePhotoUpload(event)">
+                                        <div class="upload-placeholder" id="upload-placeholder">
+                                            <span class="upload-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                                    <circle cx="12" cy="13" r="4"/>
+                                                </svg>
+                                            </span>
+                                            <span class="upload-title">Сделать снимок или загрузить</span>
+                                            <span class="upload-subtitle">Рекомендуется делать фото крупным планом</span>
+                                        </div>
+                                        
+                                        <!-- Превью выбранного фото -->
+                                        <div class="photo-preview-container hidden" id="photo-preview-container">
+                                            <img src="" id="photo-preview" alt="Превью списания">
+                                            <button type="button" class="remove-photo-btn" onclick="clearPhoto()">✕</button>
+                                        </div>
+                                    </div>
+                                    <!-- Быстрые фото-пресеты для десктоп-тестирования (Hackathon Friendly!) -->
+                                    <div class="photo-presets">
+                                        <span class="preset-label">Быстрый выбор фото:</span>
+                                        <div class="preset-buttons">
+                                            <button type="button" class="preset-btn" onclick="usePresetPhoto('tomatoes')">🍅 Томаты</button>
+                                            <button type="button" class="preset-btn" onclick="usePresetPhoto('patty')">🍔 Котлета</button>
+                                            <button type="button" class="preset-btn" onclick="usePresetPhoto('buns')">🥯 Булочка</button>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="photo-data-url" required>
+                                </div>
+
+                                <!-- 5. Обязательный комментарий -->
+                                <div class="form-group">
+                                    <label for="input-comment">Комментарий к списанию <span class="required">*</span></label>
+                                    <textarea id="input-comment" rows="3" placeholder="Опишите причину списания подробно (например: Упала котлета на пол при сборке бургера)..." required minlength="10" oninput="validateComment()"></textarea>
+                                    <div class="comment-footer">
+                                        <span class="char-counter" id="char-counter">0 / 10 символов</span>
+                                        <span class="input-tip">Минимум 10 символов</span>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary btn-block" id="submit-writeoff-btn" disabled>
+                                    Отправить на проверку
+                                </button>
+                            </form>
+                        </section>
+
+                        <!-- ЭКРАН 3: Моя история (Сотрудник) -->
+                        <section id="screen-employee-history" class="screen-view">
+                            <div class="section-title">
+                                <h2>История списаний</h2>
+                                <p>Ваши отправленные заявки</p>
+                            </div>
+
+                            <div class="history-list" id="employee-history-list">
+                                <!-- Заполняется динамически -->
+                            </div>
+                        </section>
+
+                        <!-- ЭКРАН 4: Рассмотрение заявок (Проверяющий) -->
+                        <section id="screen-reviewer-queue" class="screen-view">
+                            <div class="section-title">
+                                <h2>Очередь проверок</h2>
+                                <p>Заявки, требующие вашего подтверждения</p>
+                            </div>
+
+                            <div class="reviewer-queue-list" id="reviewer-queue-list">
+                                <!-- Заполняется динамически -->
+                            </div>
+                        </section>
+
+                        <!-- ЭКРАН 5: Вся история и аналитика (Проверяющий) -->
+                        <section id="screen-reviewer-history" class="screen-view">
+                            <div class="section-title">
+                                <h2>Аналитика списаний</h2>
+                                <p>Все операции и сводные показатели</p>
+                            </div>
+
+                            <!-- KPI Карточки -->
+                            <div class="analytics-kpi-grid">
+                                <div class="kpi-card">
+                                    <span class="kpi-value" id="kpi-total-cost">0 ₽</span>
+                                    <span class="kpi-label">Списано всего</span>
+                                </div>
+                                <div class="kpi-card">
+                                    <span class="kpi-value" id="kpi-approved-count">0</span>
+                                    <span class="kpi-label">Одобрено актов</span>
+                                </div>
+                                <div class="kpi-card">
+                                    <span class="kpi-value" id="kpi-deduction-percent">0%</span>
+                                    <span class="kpi-label">С удержанием</span>
+                                </div>
+                            </div>
+
+                            <!-- Диаграмма списаний по точкам -->
+                            <div class="analytics-chart-container">
+                                <h4>Списания по торговым точкам</h4>
+                                <div class="chart-bars" id="chart-outlets-bars">
+                                    <!-- Строится через JS -->
+                                </div>
+                            </div>
+
+                            <!-- Сводная таблица/список всех списаний -->
+                            <div class="history-filters">
+                                <select id="filter-outlet" onchange="renderReviewerHistory()">
+                                    <option value="all">Все точки</option>
+                                    <!-- Заполняется JS -->
+                                </select>
+                                <select id="filter-status" onchange="renderReviewerHistory()">
+                                    <option value="all">Все статусы</option>
+                                    <option value="pending">На проверке</option>
+                                    <option value="approved">Утверждено</option>
+                                    <option value="rejected">Отклонено</option>
+                                </select>
+                            </div>
+
+                            <div class="history-list mt-3" id="reviewer-all-history-list">
+                                <!-- Заполняется динамически -->
+                            </div>
+                        </section>
+                    </main>
+
+                    <!-- Нижнее меню навигации (Мобильное) -->
+                    <nav class="mobile-nav" id="mobile-nav" style="display: none;">
+                        <!-- Навигация для сотрудника -->
+                        <div class="nav-group-wrapper active" id="nav-employee">
+                            <button class="nav-item active" id="nav-item-form" onclick="switchMobileScreen('screen-writeoff-form')">
+                                <span class="nav-icon">📝</span>
+                                <span class="nav-label">Списать</span>
+                            </button>
+                            <button class="nav-item" id="nav-item-emphist" onclick="switchMobileScreen('screen-employee-history')">
+                                <span class="nav-icon">📋</span>
+                                <span class="nav-label">История</span>
+                            </button>
+                            <button class="nav-item" onclick="logout()">
+                                <span class="nav-icon">🚪</span>
+                                <span class="nav-label">Выход</span>
+                            </button>
+                        </div>
+
+                        <!-- Навигация для проверяющего -->
+                        <div class="nav-group-wrapper" id="nav-reviewer">
+                            <button class="nav-item active" id="nav-item-queue" onclick="switchMobileScreen('screen-reviewer-queue')">
+                                <span class="nav-icon">⏳</span>
+                                <span class="nav-label">Очередь</span>
+                            </button>
+                            <button class="nav-item" id="nav-item-revhist" onclick="switchMobileScreen('screen-reviewer-history')">
+                                <span class="nav-icon">📊</span>
+                                <span class="nav-label">Аналитика</span>
+                            </button>
+                            <button class="nav-item" onclick="logout()">
+                                <span class="nav-icon">🚪</span>
+                                <span class="nav-label">Выход</span>
+                            </button>
+                        </div>
+                    </nav>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ПРАВАЯ ЧАСТЬ: IIKO API Console & Live Log Terminal -->
+        <div class="iiko-console-panel">
+            <div class="console-header">
+                <div class="console-title">
+                    <span class="terminal-dot green"></span>
+                    <h3>Интеграция с IIKO Cloud API</h3>
+                </div>
+                <div class="console-actions">
+                    <button class="btn-console-clear" onclick="clearConsole()">Очистить логи</button>
+                </div>
+            </div>
+
+            <div class="console-intro">
+                <p>При подтверждении списания проверяющим, система автоматически создает соответствующий документ в IIKO. Ниже выводятся реальные JSON-пакеты, передаваемые по протоколам интеграции.</p>
+            </div>
+
+            <div class="console-body" id="console-logs">
+                <div class="log-entry system">
+                    <span class="log-time">[13:02:18]</span>
+                    <span class="log-message">Система инициализирована. Ожидание транзакций списания...</span>
+                </div>
+                <!-- Логи будут добавляться динамически -->
+            </div>
+            
+            <div class="console-footer">
+                <div class="api-reference">
+                    <h4>Используемый стек API IIKO:</h4>
+                    <ul>
+                        <li><code>/api/1/access_token</code> — Авторизация по API-ключу организации</li>
+                        <li><code>/api/1/nomenclature</code> — Синхронизация остатков и артикулов</li>
+                        <li><code>/api/1/documents/write_off</code> — Отправка заполненного акта списания</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: Выбор продукта (Каталог продукции) -->
+    <div class="modal-backdrop hidden" id="product-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Каталог продукции</h3>
+                <button class="modal-close-btn" onclick="closeProductModal()">✕</button>
+            </div>
+            <div class="modal-search">
+                <input type="text" id="product-search" placeholder="Поиск по названию или коду..." oninput="filterProducts()">
+            </div>
+            <div class="product-categories" id="product-categories">
+                <!-- Категории динамически -->
+            </div>
+            <div class="modal-body product-grid" id="modal-product-grid">
+                <!-- Продукты динамически -->
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: Ввод причины отклонения -->
+    <div class="modal-backdrop hidden" id="reject-modal">
+        <div class="modal-card small-modal">
+            <div class="modal-header">
+                <h3>Отклонить заявку</h3>
+                <button class="modal-close-btn" onclick="closeRejectModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="reject-reason-input">Укажите причину отклонения <span class="required">*</span></label>
+                    <textarea id="reject-reason-input" rows="3" placeholder="Например: Нечеткое фото продукции, переделайте снимок..."></textarea>
+                </div>
+                <div class="modal-actions mt-3">
+                    <button class="btn btn-secondary" onclick="closeRejectModal()">Отмена</button>
+                    <button class="btn btn-danger" onclick="submitRejection()">Отклонить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подключаем скрипты -->
+    <script src="iiko-sim.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
